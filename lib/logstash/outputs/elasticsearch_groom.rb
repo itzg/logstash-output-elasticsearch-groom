@@ -3,7 +3,7 @@ require "logstash/outputs/base"
 require "logstash/namespace"
 
 # An example output that does nothing.
-class LogStash::Outputs::Example < LogStash::Outputs::Base
+class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
   config_name "elasticsearch_groom"
 
   public
