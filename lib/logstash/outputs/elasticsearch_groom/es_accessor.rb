@@ -1,4 +1,4 @@
-module LogStash::Outputs::ElasticsearchGroom
+module LogStash::Outputs::EsGroom
 
   class EsAccessor
     def initialize(options={})
