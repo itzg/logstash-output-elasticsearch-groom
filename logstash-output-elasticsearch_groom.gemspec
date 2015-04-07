@@ -1,5 +1,5 @@
 Gem::Specification.new do |s|
-  s.name = 'logstash-output-elasticsearch-groom'
+  s.name = 'logstash-output-elasticsearch_groom'
   s.version         = "0.1.0"
   s.licenses = ["Apache License (2.0)"]
   s.summary = "Grooms the time-series Elastichsearch indices."
@@ -25,6 +25,7 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency "logstash-core", ">= 1.4.0", "< 2.0.0"
   s.add_runtime_dependency 'logstash-codec-plain', '~> 0'
 
+  s.add_development_dependency 'ftw', '~> 0.0.42'
   s.add_development_dependency 'logstash-input-generator', '~> 0'
   s.add_development_dependency 'logstash-devutils', '~> 0'
 end
