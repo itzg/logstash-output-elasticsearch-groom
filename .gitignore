@@ -6,3 +6,5 @@ vendor
 lib/logstash-output-elasticsearch_groom_jars.rb
 lib/com
 lib/org
+/.idea
+/*.iml
