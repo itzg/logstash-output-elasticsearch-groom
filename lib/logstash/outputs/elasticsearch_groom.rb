@@ -4,26 +4,93 @@ require 'logstash/namespace'
 require 'logstash-output-elasticsearch_groom_jars'
 require 'java'
 
+# This output grooms the indices created by the `elasticsearch` output plugin. By leveraging the same timestamp-based
+# `index` specification, this plugin closes or deletes indices that are older than a configured cutoff.
+#
+# The actions of this plugin are event-driven, meaning it only evaluates and grooms indices when an event
+# is received. Combined with the `logstash-input-heartbeat` plugin, there is some interesting configurations you can setup
+# such as:
+#
+# [source]
+# ----------------------------------
+# input {
+#   heartbeat {
+#     type => 'groom'
+#     interval => 86400
+#     add_field => {
+#       scope => 'open'
+#       cutoff => '2w'
+#       action => 'close'
+#     }
+#   }
+#
+#   heartbeat {
+#     type => 'groom'
+#     interval => 86400
+#     add_field => {
+#       scope => 'closed'
+#       cutoff => '4w'
+#       action => 'delete'
+#     }
+#   }
+# }
+#
+# output {
+#   if [type] == 'groom' {
+#     elasticsearch_groom {
+#        host => 'localhost:9200'
+#        index => 'logstash-%{+YYYY.MM.dd}'
+#        scope => '%{scope}'
+#        age_cutoff => '%{cutoff}'
+#        action => '%{action}'
+#     }
+#   }
+# }
+# ----------------------------------
 class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
-  config_name "elasticsearch_groom"
+  config_name 'elasticsearch_groom'
 
-  config :index, :required => true, :default => "logstash-%{+YYYY.MM.dd}"
+  # Declares a template for matching potential indices to groom. If you're using the output elasticsearch
+  # plugin, which is probably why you're here, then this is the same value as `index` over there.
+  # It needs to include at least a timestamp placeholder like `%{+YYYY.MM.dd}` where the pattern
+  # after the `+` is any http://www.joda.org/joda-time/apidocs/org/joda/time/format/DateTimeFormat.html[valid Joda Time pattern].
+  # This can include other event field references via `%{value}` substitution or
+  # `*` to wildcard any part of the index name.
+  config :index, :validate => :string, :required => true, :default => "logstash-%{+YYYY.MM.dd}"
 
+  # The hostname or IP address of the host to use for Elasticsearch unicast discovery
+  # The entries are formatted as `host:port`, where `port` is typically 9200
   config :host, :validate => :array, :default => "localhost:9200"
 
   # Specifies if 'open' or 'closed' indices should be considered.
-  # Can include/be an event field reference via %{value} substitution
+  # Can include/be an event field reference via `%{value}` substitution
   config :scope, :validate => :string, :default => 'open'
 
+  # Declares the relative age of indices that will be processed by the action.
+  # The allowed values for this are formed as <<number>><<scale>> where
+  # scale is 'h' (hours), 'd' (days), 'w' (weeks) and the age is relative
+  # to the event's @timestamp.
+  # Can include/be an event field reference via `%{value}` substitution
   config :age_cutoff, :validate => :string, :default => '4w'
+
+  # For those indices that are older than the age_cutoff, this is the action
+  # to take on those indices. The possible choices are 'close' or 'delete'.
+  # Can include/be an event field reference via `%{value}` substitution
+  config :action, :validate => :string, :default => 'close'
+
+  # Indicates if incoming events that were successfully used should be cancelled
+  config :cancel_when_used, :validate => :boolean, :default => true
 
   public
   def register
-    require "logstash/outputs/elasticsearch_groom/es_accessor"
+    require 'logstash/outputs/elasticsearch_groom/es_accessor'
     options = {
         host: @host
     }
-    @esAccess = LogStash::Outputs::EsGroom::EsAccessor.new(options)
+    @es_access = LogStash::Outputs::EsGroom::EsAccessor.new(options)
+
+    raise LogStash::ConfigurationError, "A timestamp placeholder %{+___} is required in the 'index' config of elasticsearch_groom" \
+       unless @index.match /%{\+(.+)}/
   end # def register
 
   public
@@ -34,68 +101,95 @@ class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
     tsWildcarded = event.sprintf tsWildcarded
 
     resolvedScope = event.sprintf(@scope)
-    return unless validOption? 'scope', resolvedScope, ['open','closed','both']
+    return unless valid_option? 'scope', resolvedScope, %w(open closed both)
 
-    candidates = @esAccess.matching_indices pattern: tsWildcarded, scope: resolvedScope
-    puts "Starting with #{candidates}"
+    candidates = @es_access.matching_indices tsWildcarded, resolvedScope
+    @logger.debug? and @logger.debug "Starting with #{candidates}"
 
+    groomed = []
     if (tsBitMatched = @index.match /%{\+(.+)}/)
-      groomByTime(event, candidates, tsBitMatched)
+      groomed = groom_by_time(event, candidates, tsBitMatched)
     else
       @logger.warn "Only 'index' with a timestamp placeholder is supported. Instead had #{resolvedIndex}"
     end
 
-    return "Event received"
+    # We consumed it, so cancel it
+    event.cancel if @cancel_when_used
+
+    "Groomed #{groomed}"
   end
 
-  def groomByTime(event, candidates, tsBitMatched)
-    ts = event.timestamp # of type Logstash::Timestamp
-    resolvedCutoff = event.sprintf(@age_cutoff)
-    cutoffMsec = convertCutoff(resolvedCutoff)
-    return unless cutoffMsec
 
-    eventDt = Java::OrgJodaTime::DateTime.new ts.to_i*1000
-    absCutoffDt = eventDt.minus cutoffMsec
-    puts "Cutoff is #{absCutoffDt}"
+  protected
+  def groom_by_time(event, candidates, ts_bit_matched)
+    resolved_cutoff = event.sprintf(@age_cutoff)
+    cutoff_msec = convert_cutoff(resolved_cutoff)
+    return unless cutoff_msec
 
-    dtFormat = Java::OrgJodaTimeFormat::DateTimeFormat.forPattern tsBitMatched[1]
-    resolvedIndex = event.sprintf (tsBitMatched.pre_match + '(.+)' + tsBitMatched.post_match)
-    indexParseRegex = Regexp.new resolvedIndex
-    puts "Index regex is #{indexParseRegex}"
+    event_ts_ms = event.timestamp.to_i*1000
+    event_dt = org.joda.time.DateTime.new
+    event_dt.set_millis event_ts_ms.to_java(:long)
+    abs_cutoff_dt = event_dt.minus cutoff_msec
 
-    needsGrooming = candidates.find_all do |i|
-      if (matchData = indexParseRegex.match(i))
-        indexDt = dtFormat.parseDateTime matchData[1]
-        puts "Parsed DateTime of #{i} is #{indexDt}"
-        next indexDt.isBefore absCutoffDt
+    @logger.debug? and @logger.debug "Grooming indices older than #{abs_cutoff_dt}"
+
+    dt_format = org.joda.time.format.DateTimeFormat.forPattern ts_bit_matched[1]
+    resolved_index = event.sprintf (ts_bit_matched.pre_match + '(.+)' + ts_bit_matched.post_match)
+    index_parse_regex = Regexp.new resolved_index
+    @logger.debug? and @logger.debug "Index regex is #{index_parse_regex}"
+
+    # Narrow down the candidates to only those that are older than the cutoff
+    needs_grooming = candidates.find_all do |i|
+
+      if (match_data = index_parse_regex.match(i))
+        index_dt = dt_format.parseDateTime match_data[1]
+        @logger.debug? and @logger.debug "Parsed DateTime of #{i} is #{index_dt}"
+        next index_dt.isBefore abs_cutoff_dt
+      end
+
+    end
+
+    unless needs_grooming.empty?
+      resolved_action = event.sprintf @action
+      return unless valid_option? 'action', resolved_action, %w(close delete)
+
+      @logger.info? and @logger.info "Performing the action #{resolved_action} on #{needs_grooming}"
+      case resolved_action
+        when 'close' then
+          @es_access.close_indices needs_grooming
+        when 'delete' then
+          @es_access.delete_indices needs_grooming
+        else
+          @logger.warn "Action resolved to an unexpected value #{resolved_action}"
       end
     end
-    puts "Found these to groom #{needsGrooming}"
 
+    needs_grooming
   end
 
   # Converts the cutoff expression into a duration in milliseconds
-  def convertCutoff(cutoffStr)
-    matchData = /(\d+)([hdw])/.match(cutoffStr)
-    if matchData
-      value = matchData[1]
-      return value.to_i * 1000 * 3600 * case matchData[2]
-        when 'h' then 1
-        when 'd' then 24
-        when 'w' then 24*7
-      end
+  def convert_cutoff(cutoff_str)
+    match_data = /(\d+)([hdw])/.match(cutoff_str)
+    if match_data
+      value = match_data[1]
+      value.to_i * 1000 * 3600 * case match_data[2]
+              when 'h' then 1
+              when 'd' then 24
+              when 'w' then 24*7
+              else
+                @logger.warn("Invalid cutoff of #{cutoff_str}")
+                nil
+            end
     else
-      @logger.warn("Invalid cutoff of #{cutoffStr}")
-      return nil
+      @logger.warn("Invalid cutoff of #{cutoff_str}")
+      nil
     end
   end
 
-  # def event
-
-  def validOption?(option, givenValue, validValues)
-    valid = validValues.member?(givenValue)
-    @logger.warn "#{option} contained an invalid value: #{givenValue}. Valid values are #{validValues}" \
+  def valid_option?(option, given_value, valid_values)
+    valid = valid_values.member?(given_value)
+    @logger.warn "#{option} contained an invalid value: #{given_value}. Valid values are #{valid_values}" \
         unless valid
-    return valid
+    valid
   end
 end
