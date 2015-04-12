@@ -16,11 +16,30 @@ describe 'outputs/elasticsearch_groom' do
     output = outputClass.new()
     output.register
 
-    event = LogStash::Event.new(@timestamp => '2015-04-11T00:00:00')
+    event = LogStash::Event.new('@timestamp' => '2015-03-15T00:00:00')
 
     expect(es_accessor).to receive(:matching_indices)
                                .with('logstash-*', 'open')
-                               .and_return(['logstash-2015.04.11'])
+                               .and_return(['logstash-2015.03.12'])
+    expect(es_accessor).not_to receive(:close_indices)
+    expect(es_accessor).not_to receive(:delete_indices)
     output.receive event
+  end
+
+  it 'should act upon just older ones' do
+    output = outputClass.new('action' => 'delete', 'age_cutoff' => '4w')
+    output.register
+
+    event = LogStash::Event.new('@timestamp' => '2015-03-15T00:00:00')
+
+    expect(es_accessor).to receive(:matching_indices)
+                               .with('logstash-*', 'open')
+                               .and_return(%w(logstash-2015.03.12 logstash-2015.02.13 logstash-2015.02.12))
+    expect(es_accessor).not_to receive(:close_indices)
+    expect(es_accessor).to receive(:delete_indices)
+                               .with(%w(logstash-2015.02.13 logstash-2015.02.12))
+                               .once
+    output.receive event
+
   end
 end
