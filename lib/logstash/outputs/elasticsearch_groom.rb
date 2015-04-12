@@ -93,7 +93,7 @@ class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
   end
 
   protected
-  def self.create_es_accessor(options)
+  def create_es_accessor(options)
     require 'logstash/outputs/elasticsearch_groom/es_accessor'
 
     LogStash::Outputs::EsGroom::EsAccessor.new(options)
