@@ -8,3 +8,4 @@ lib/com
 lib/org
 /.idea
 /*.iml
+/out
