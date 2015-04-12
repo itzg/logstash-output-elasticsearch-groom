@@ -83,15 +83,23 @@ class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
 
   public
   def register
-    require 'logstash/outputs/elasticsearch_groom/es_accessor'
     options = {
         host: @host
     }
-    @es_access = LogStash::Outputs::EsGroom::EsAccessor.new(options)
+    @es_access = create_es_accessor(options)
 
     raise LogStash::ConfigurationError, "A timestamp placeholder %{+___} is required in the 'index' config of elasticsearch_groom" \
        unless @index.match /%{\+(.+)}/
-  end # def register
+  end
+
+  protected
+  def self.create_es_accessor(options)
+    require 'logstash/outputs/elasticsearch_groom/es_accessor'
+
+    LogStash::Outputs::EsGroom::EsAccessor.new(options)
+  end
+
+  # def register
 
   public
   def receive(event)
