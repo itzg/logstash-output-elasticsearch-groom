@@ -1,5 +1,4 @@
-# logstash-output-example
-Example output plugin. This should help bootstrap your effort to write your own output plugin!
+# logstash-output-elasticsearch-groom
 
 ## On Windows, with Logstash 1.5.0.rc2
 

@@ -2,7 +2,7 @@ Gem::Specification.new do |s|
   s.name = 'logstash-output-elasticsearch_groom'
   s.version         = "0.1.0"
   s.licenses = ["Apache License (2.0)"]
-  s.summary = "Grooms the time-series Elastichsearch indices."
+  s.summary = "Grooms time-series Elastichsearch indices."
   s.description = "A logstash output plugin that will perform event triggered grooming (aka pruning) of time-series indices especially those created by logstash-output-elasticsearch."
   s.authors = ["Geoff Bourne"]
   s.email = "itzgeoff@gmail.com"
