@@ -1,4 +1,8 @@
-# Logstash Plugin
+# Elasticsearch Groom Logstash Output Plugin
+
+[![Gem Version](https://badge.fury.io/rb/logstash-output-elasticsearch_groom.svg)](http://badge.fury.io/rb/logstash-output-elasticsearch_groom)
+
+[![Circle CI](https://circleci.com/gh/itzg/logstash-output-elasticsearch-groom.svg?style=svg)](https://circleci.com/gh/itzg/logstash-output-elasticsearch-groom)
 
 This is a plugin for [Logstash](https://github.com/elasticsearch/logstash).
 
