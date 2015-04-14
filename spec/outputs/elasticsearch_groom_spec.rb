@@ -42,4 +42,21 @@ describe 'outputs/elasticsearch_groom' do
     output.receive event
 
   end
+
+  it 'should handle an index with field references also' do
+    output = outputClass.new('action' => 'delete', 'age_cutoff' => '4w', 'index' => 'logstash-%{+YYYY.MM.dd}-%{subtype}')
+    output.register
+
+    event = LogStash::Event.new('@timestamp' => '2015-03-15T00:00:00', 'subtype' => 'logs')
+
+    expect(es_accessor).to receive(:matching_indices)
+                               .with('logstash-*-logs', 'open')
+                               .and_return(%w(logstash-2015.03.12-logs logstash-2015.02.13-logs logstash-2015.02.12-logs))
+    expect(es_accessor).not_to receive(:close_indices)
+    expect(es_accessor).to receive(:delete_indices)
+                               .with(%w(logstash-2015.02.13-logs logstash-2015.02.12-logs))
+                               .once
+    output.receive event
+
+  end
 end

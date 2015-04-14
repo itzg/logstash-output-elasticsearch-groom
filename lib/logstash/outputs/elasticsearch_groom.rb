@@ -105,7 +105,7 @@ class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
   def receive(event)
     return unless output?(event)
 
-    ts_wildcarded = @index.gsub /%{\+.+}/, '*'
+    ts_wildcarded = @index.gsub /%{\+[^}]+}/, '*'
     ts_wildcarded = event.sprintf ts_wildcarded
 
     resolved_scope = event.sprintf(@scope)
@@ -115,7 +115,7 @@ class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
     @logger.debug? and @logger.debug "Starting with #{candidates}"
 
     groomed = []
-    if (ts_bit_matched = @index.match /%{\+(.+)}/)
+    if (ts_bit_matched = @index.match /%{\+([^}]+)}/)
       groomed = groom_by_time(event, candidates, ts_bit_matched)
     else
       @logger.warn "Only 'index' with a timestamp placeholder is supported. Instead had #{resolvedIndex}"
