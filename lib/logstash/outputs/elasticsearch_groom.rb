@@ -150,9 +150,15 @@ class LogStash::Outputs::ElasticsearchGroom < LogStash::Outputs::Base
     needs_grooming = candidates.find_all do |i|
 
       if (match_data = index_parse_regex.match(i))
-        index_dt = dt_format.parseDateTime match_data[1]
-        @logger.debug? and @logger.debug "Parsed DateTime of #{i} is #{index_dt}"
-        next index_dt.isBefore abs_cutoff_dt
+        date_part = match_data[1]
+        begin
+          index_dt = dt_format.parseDateTime date_part
+          @logger.debug? and @logger.debug "Parsed DateTime of #{i} is #{index_dt}"
+          next index_dt.isBefore abs_cutoff_dt
+        rescue java.lang.IllegalArgumentException => e
+          @logger.warn "Unable to parse date from #{date_part} part of #{i}"
+          false
+        end
       end
 
     end
