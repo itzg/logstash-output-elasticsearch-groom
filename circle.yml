@@ -4,7 +4,6 @@ machine:
 
 test:
   post:
-    - bundle install
     - bundle exec rspec
 
 deployment:
