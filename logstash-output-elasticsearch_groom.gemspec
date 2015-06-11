@@ -27,5 +27,6 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency 'logstash-codec-plain', '~> 0'
 
   s.add_development_dependency 'logstash-devutils', '~> 0'
+  s.add_development_dependency 'maven-tools', '~> 1.0.9'
   s.add_development_dependency 'ruby-maven', '~> 3.3.2'
 end
