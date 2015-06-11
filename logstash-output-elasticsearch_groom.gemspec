@@ -20,13 +20,14 @@ Gem::Specification.new do |s|
   s.metadata = { "logstash_plugin" => "true", "logstash_group" => "output" }
 
   # Gem dependencies
+
+  s.add_development_dependency 'logstash-devutils', '~> 0'
+  s.add_development_dependency 'ruby-maven', '~> 3.3.2'
+  s.add_development_dependency 'maven-tools', '~> 1.0.9'
+
   s.requirements << "jar 'org.elasticsearch:elasticsearch', '1.5.1'"
   s.add_runtime_dependency 'jar-dependencies', '~> 0'
   s.add_runtime_dependency 'elasticsearch', ['>= 1.0.7', '~> 1.0']
   s.add_runtime_dependency "logstash-core", ">= 1.5.0", "< 2.0.0"
   s.add_runtime_dependency 'logstash-codec-plain', '~> 0'
-
-  s.add_development_dependency 'logstash-devutils', '~> 0'
-  s.add_development_dependency 'ruby-maven', '~> 3.3.2'
-  s.add_development_dependency 'maven-tools', '~> 1.0.9'
 end
